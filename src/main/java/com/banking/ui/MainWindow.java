@@ -1,0 +1,342 @@
+ package com.banking.ui;
+ 
+ import com.banking.model.Account;
+ import com.banking.model.CheckingAccount;
+ import com.banking.model.Customer;
+ import com.banking.model.SavingsAccount;
+ import com.banking.model.Transaction;
+ import com.banking.model.User;
+ import com.banking.services.AuthenticationService;
+ import com.banking.services.BankService;
+ 
+ import javax.swing.BorderFactory;
+ import javax.swing.DefaultListModel;
+ import javax.swing.JButton;
+ import javax.swing.JFrame;
+ import javax.swing.JLabel;
+ import javax.swing.JList;
+ import javax.swing.JOptionPane;
+ import javax.swing.JPanel;
+ import javax.swing.JPasswordField;
+ import javax.swing.JScrollPane;
+ import javax.swing.JTextArea;
+ import javax.swing.JTextField;
+ import javax.swing.SwingUtilities;
+ import java.awt.BorderLayout;
+ import java.awt.CardLayout;
+ import java.awt.GridBagConstraints;
+ import java.awt.GridBagLayout;
+ import java.awt.Insets;
+ import java.text.NumberFormat;
+ import java.util.Locale;
+ import java.util.List;
+ 
+ public class MainWindow extends JFrame {
+ 
+     private final AuthenticationService authenticationService;
+     private final BankService bankService;
+ 
+     // Auth state
+     private String currentUsername = null;
+ 
+     // Root with cards
+     private final JPanel cards = new JPanel(new CardLayout());
+     private final String CARD_AUTH = "auth";
+     private final String CARD_DASH = "dash";
+ 
+     // Auth UI
+     private final JTextField usernameField = new JTextField(16);
+     private final JPasswordField passwordField = new JPasswordField(16);
+     private final JLabel statusLabel = new JLabel(" ");
+ 
+     // Dashboard UI
+     private final DefaultListModel<String> accountsListModel = new DefaultListModel<>();
+     private final JList<String> accountsList = new JList<>(accountsListModel);
+     private final JLabel dashStatus = new JLabel(" ");
+    private final NumberFormat INR = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-IN"));
+ 
+     public MainWindow(AuthenticationService authenticationService, BankService bankService) {
+         this.authenticationService = authenticationService;
+         this.bankService = bankService;
+ 
+         setTitle("Online Banking Application");
+         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+         setSize(640, 420);
+         setLocationRelativeTo(null);
+ 
+         cards.add(buildAuthPanel(), CARD_AUTH);
+         cards.add(buildDashboardPanel(), CARD_DASH);
+ 
+         setContentPane(cards);
+         showAuth();
+     }
+ 
+     private JPanel buildAuthPanel() {
+         JPanel root = new JPanel(new BorderLayout(12, 12));
+         root.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+         root.add(new JLabel("Welcome to the Online Banking Application!", JLabel.CENTER), BorderLayout.NORTH);
+ 
+         JPanel form = new JPanel(new GridBagLayout());
+         GridBagConstraints gbc = new GridBagConstraints();
+         gbc.insets = new Insets(6, 6, 6, 6);
+         gbc.anchor = GridBagConstraints.WEST;
+ 
+         gbc.gridx = 0; gbc.gridy = 0;
+         form.add(new JLabel("Username:"), gbc);
+         gbc.gridx = 1; gbc.gridy = 0; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+         form.add(usernameField, gbc);
+ 
+         gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+         form.add(new JLabel("Password:"), gbc);
+         gbc.gridx = 1; gbc.gridy = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+         form.add(passwordField, gbc);
+ 
+         JPanel buttons = new JPanel();
+         JButton loginButton = new JButton("Login");
+         JButton registerButton = new JButton("Register");
+         buttons.add(loginButton);
+         buttons.add(registerButton);
+ 
+         gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2;
+         form.add(buttons, gbc);
+ 
+         gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2;
+         form.add(statusLabel, gbc);
+ 
+         loginButton.addActionListener(e -> doLogin());
+         registerButton.addActionListener(e -> doRegister());
+ 
+         root.add(form, BorderLayout.CENTER);
+         return root;
+     }
+ 
+     private JPanel buildDashboardPanel() {
+         JPanel root = new JPanel(new BorderLayout(8, 8));
+         root.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+ 
+         root.add(new JLabel("Your Accounts:"), BorderLayout.NORTH);
+         accountsList.setVisibleRowCount(10);
+         root.add(new JScrollPane(accountsList), BorderLayout.CENTER);
+ 
+         JPanel actions = new JPanel();
+         JButton createBtn = new JButton("Create Account");
+         JButton depositBtn = new JButton("Deposit");
+         JButton withdrawBtn = new JButton("Withdraw");
+         JButton historyBtn = new JButton("View History");
+         JButton refreshBtn = new JButton("Refresh");
+         JButton logoutBtn = new JButton("Logout");
+ 
+         actions.add(createBtn);
+         actions.add(depositBtn);
+         actions.add(withdrawBtn);
+         actions.add(historyBtn);
+         actions.add(refreshBtn);
+         actions.add(logoutBtn);
+ 
+         createBtn.addActionListener(e -> actionCreateAccount());
+         depositBtn.addActionListener(e -> actionDeposit());
+         withdrawBtn.addActionListener(e -> actionWithdraw());
+         historyBtn.addActionListener(e -> actionViewHistory());
+         refreshBtn.addActionListener(e -> refreshAccountsList());
+         logoutBtn.addActionListener(e -> doLogout());
+ 
+         JPanel south = new JPanel(new BorderLayout());
+         south.add(actions, BorderLayout.CENTER);
+         south.add(dashStatus, BorderLayout.SOUTH);
+         root.add(south, BorderLayout.SOUTH);
+ 
+         return root;
+     }
+ 
+     private void showAuth() {
+         ((CardLayout) cards.getLayout()).show(cards, CARD_AUTH);
+     }
+ 
+     private void showDash() {
+         ((CardLayout) cards.getLayout()).show(cards, CARD_DASH);
+         refreshAccountsList();
+     }
+ 
+     private void doRegister() {
+         String username = usernameField.getText().trim();
+         String password = new String(passwordField.getPassword());
+         if (username.isEmpty() || password.isEmpty()) {
+             setStatus("Please enter username and password.");
+             return;
+         }
+         boolean ok = authenticationService.registerUser(username, password);
+         if (ok) {
+             // Also create a corresponding Customer profile
+             Customer existing = bankService.findCustomerByUsername(username);
+             if (existing == null) {
+                 bankService.addCustomer(new Customer(username, "", new User(username, password)));
+             }
+             setStatus("Registered. You can now log in.");
+         } else {
+             setStatus("Username already exists.");
+         }
+     }
+ 
+     private void doLogin() {
+         String username = usernameField.getText().trim();
+         String password = new String(passwordField.getPassword());
+         if (username.isEmpty() || password.isEmpty()) {
+             setStatus("Please enter username and password.");
+             return;
+         }
+         if (authenticationService.login(username, password) != null) {
+             currentUsername = username;
+             // Ensure customer exists
+             if (bankService.findCustomerByUsername(username) == null) {
+                 bankService.addCustomer(new Customer(username, "", new User(username, password)));
+             }
+             showDash();
+         } else {
+             setStatus("Invalid credentials.");
+         }
+     }
+ 
+     private void doLogout() {
+         currentUsername = null;
+         usernameField.setText("");
+         passwordField.setText("");
+         setStatus(" ");
+         dashStatus.setText(" ");
+         showAuth();
+     }
+ 
+     private void refreshAccountsList() {
+         accountsListModel.clear();
+         if (currentUsername == null) return;
+         List<Account> accounts = bankService.getAccountsForCustomer(currentUsername);
+        for (Account acc : accounts) {
+            accountsListModel.addElement(acc.getAccountNumber() + " | Balance: " + INR.format(acc.getBalance()));
+        }
+     }
+ 
+     private Customer getCurrentCustomer() {
+         return currentUsername == null ? null : bankService.findCustomerByUsername(currentUsername);
+     }
+ 
+     private Account findAccountByNumber(String accountNumber) {
+         Customer c = getCurrentCustomer();
+         if (c == null) return null;
+         for (Account a : c.getAccounts()) {
+             if (a.getAccountNumber().equals(accountNumber)) return a;
+         }
+         return null;
+     }
+ 
+     private void actionCreateAccount() {
+         String[] options = {"Savings", "Checking"};
+         int choice = JOptionPane.showOptionDialog(this, "Choose account type:", "Create Account",
+                 JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+         if (choice == JOptionPane.CLOSED_OPTION) return;
+ 
+         String accountNumber = JOptionPane.showInputDialog(this, "Enter new account number:");
+         if (accountNumber == null || accountNumber.isBlank()) return;
+ 
+         Customer c = getCurrentCustomer();
+         if (c == null) { dashStatus.setText("No customer context."); return; }
+ 
+         try {
+             if (choice == 0) { // Savings
+                 String rateStr = JOptionPane.showInputDialog(this, "Enter interest rate (e.g., 0.05):");
+                 if (rateStr == null) return;
+                 double rate = Double.parseDouble(rateStr);
+                 c.addAccount(new SavingsAccount(accountNumber, rate));
+             } else { // Checking
+                 String limitStr = JOptionPane.showInputDialog(this, "Enter overdraft limit (e.g., 500):");
+                 if (limitStr == null) return;
+                 double limit = Double.parseDouble(limitStr);
+                 c.addAccount(new CheckingAccount(accountNumber, limit));
+             }
+             dashStatus.setText("Account created.");
+             refreshAccountsList();
+         } catch (NumberFormatException ex) {
+             JOptionPane.showMessageDialog(this, "Invalid number.", "Error", JOptionPane.ERROR_MESSAGE);
+         }
+     }
+ 
+    private void actionDeposit() {
+        String accountNumber = getSelectedAccountNumber();
+        if (accountNumber == null) accountNumber = promptAccountNumber();
+         if (accountNumber == null) return;
+         Account acc = findAccountByNumber(accountNumber);
+         if (acc == null) { dashStatus.setText("Account not found."); return; }
+         try {
+             String amountStr = JOptionPane.showInputDialog(this, "Amount to deposit:");
+             if (amountStr == null) return;
+             double amount = Double.parseDouble(amountStr);
+             acc.deposit(amount);
+             dashStatus.setText("Deposit successful.");
+             refreshAccountsList();
+         } catch (NumberFormatException ex) {
+             JOptionPane.showMessageDialog(this, "Invalid amount.", "Error", JOptionPane.ERROR_MESSAGE);
+         }
+     }
+ 
+    private void actionWithdraw() {
+        String accountNumber = getSelectedAccountNumber();
+        if (accountNumber == null) accountNumber = promptAccountNumber();
+         if (accountNumber == null) return;
+         Account acc = findAccountByNumber(accountNumber);
+         if (acc == null) { dashStatus.setText("Account not found."); return; }
+         try {
+             String amountStr = JOptionPane.showInputDialog(this, "Amount to withdraw:");
+             if (amountStr == null) return;
+             double amount = Double.parseDouble(amountStr);
+             acc.withdraw(amount);
+             dashStatus.setText("Withdrawal processed.");
+             refreshAccountsList();
+         } catch (NumberFormatException ex) {
+             JOptionPane.showMessageDialog(this, "Invalid amount.", "Error", JOptionPane.ERROR_MESSAGE);
+         }
+     }
+ 
+    private void actionViewHistory() {
+        String accountNumber = getSelectedAccountNumber();
+        if (accountNumber == null) accountNumber = promptAccountNumber();
+         if (accountNumber == null) return;
+         Account acc = findAccountByNumber(accountNumber);
+         if (acc == null) { dashStatus.setText("Account not found."); return; }
+         List<Transaction> txs = acc.getTransactionList();
+         if (txs.isEmpty()) {
+             JOptionPane.showMessageDialog(this, "No transactions to show.");
+             return;
+         }
+         StringBuilder sb = new StringBuilder();
+         for (Transaction t : txs) {
+             sb.append(t.getDescription()).append('\n');
+         }
+         JTextArea area = new JTextArea(sb.toString(), 15, 40);
+         area.setEditable(false);
+         JOptionPane.showMessageDialog(this, new JScrollPane(area), "Transaction History", JOptionPane.INFORMATION_MESSAGE);
+     }
+ 
+     private String promptAccountNumber() {
+         return JOptionPane.showInputDialog(this, "Enter account number:");
+     }
+
+    private String getSelectedAccountNumber() {
+        String selected = accountsList.getSelectedValue();
+        if (selected == null || selected.isBlank()) return null;
+        int sep = selected.indexOf(" | ");
+        if (sep <= 0) return null;
+        return selected.substring(0, sep);
+    }
+ 
+     private void setStatus(String message) {
+         statusLabel.setText(message);
+     }
+ 
+     // Standalone launcher (optional)
+     public static void main(String[] args) {
+         SwingUtilities.invokeLater(() -> {
+             var auth = new com.banking.services.AuthenticationService();
+             var bank = new com.banking.services.BankService();
+             MainWindow window = new MainWindow(auth, bank);
+             window.setVisible(true);
+         });
+     }
+ }
