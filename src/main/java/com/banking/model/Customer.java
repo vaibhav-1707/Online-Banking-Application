@@ -1,5 +1,7 @@
 package com.banking.model;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -7,7 +9,9 @@ import java.util.List;
  * The Customer class represents a bank customer.
  * It holds personal details, login credentials (User), and a list of accounts.
  */
-public class Customer {
+public class Customer implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private String name;
     private String email;

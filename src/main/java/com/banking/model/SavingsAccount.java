@@ -1,10 +1,14 @@
 package com.banking.model;
 
+import java.io.Serial;
+
 /**
  * SavingsAccount class represents a savings bank account.
  * It extends the abstract Account class and adds an interest rate feature.
  */
 public class SavingsAccount extends Account {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     // Interest rate for this savings account, e.g., 0.05 for 5%
     private double interestRate;

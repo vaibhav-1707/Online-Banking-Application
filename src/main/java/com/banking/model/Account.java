@@ -1,5 +1,8 @@
 package com.banking.model;
 
+import java.io.Serial;
+import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,7 +14,9 @@ import java.util.List;
  * Note: This is an abstract class because we expect to have different types of accounts
  * (like SavingsAccount or CheckingAccount) that will extend this base class.
  */
-public abstract class Account {
+public abstract class Account implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     // Unique account number to identify each account
     protected String accountNumber;
@@ -21,6 +26,9 @@ public abstract class Account {
 
     // List of all transactions performed on this account
     protected List<Transaction> transactionList;
+
+    // Creation timestamp for the account
+    protected LocalDateTime createdAt;
 
     /**
      * Constructor to create a new Account with a given account number.
@@ -32,6 +40,7 @@ public abstract class Account {
         this.accountNumber = accountNumber;
         this.balance = 0.0;  // Account starts with zero balance
         this.transactionList = new ArrayList<>();  // No transactions at the beginning
+        this.createdAt = LocalDateTime.now();
     }
 
     /**
@@ -62,6 +71,14 @@ public abstract class Account {
     }
 
     /**
+     * Get the account creation timestamp.
+     * @return LocalDateTime when the account was created
+     */
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    /**
      * Deposit a positive amount into the account.
      * Updates the balance and records the transaction.
      * 
@@ -83,17 +100,18 @@ public abstract class Account {
      * 
      * @param amount The amount to withdraw (must be > 0 and <= balance)
      */
-    public void withdraw(double amount) {
-        if (amount > 0) {
-            if (balance >= amount) {
-                balance -= amount;  // Deduct amount from balance
-                // Record this withdrawal transaction
-                transactionList.add(new Transaction("withdrawal", amount, balance));
-            } else {
-                System.out.println("Insufficient balance.");
-            }
-        } else {
+    public boolean withdraw(double amount) {
+        if (amount <= 0) {
             System.out.println("Withdrawal amount must be positive.");
+            return false;
         }
+        if (balance >= amount) {
+            balance -= amount;  // Deduct amount from balance
+            // Record this withdrawal transaction
+            transactionList.add(new Transaction("withdrawal", amount, balance));
+            return true;
+        }
+        System.out.println("Insufficient balance.");
+        return false;
     }
 }

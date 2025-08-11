@@ -22,6 +22,7 @@
  import javax.swing.JTextArea;
  import javax.swing.JTextField;
  import javax.swing.SwingUtilities;
+ import javax.swing.JFileChooser;
  import java.awt.BorderLayout;
  import java.awt.CardLayout;
  import java.awt.GridBagConstraints;
@@ -30,9 +31,12 @@
  import java.text.NumberFormat;
  import java.util.Locale;
  import java.util.List;
- 
- public class MainWindow extends JFrame {
- 
+ import java.nio.file.Path;
+ import java.time.Instant;
+ import java.time.Duration;
+
+public class MainWindow extends JFrame {
+
      private final AuthenticationService authenticationService;
      private final BankService bankService;
  
@@ -54,6 +58,11 @@
      private final JList<String> accountsList = new JList<>(accountsListModel);
      private final JLabel dashStatus = new JLabel(" ");
     private final NumberFormat INR = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-IN"));
+
+     // Persistence and session
+     private final com.banking.services.PersistenceService persistenceService = new com.banking.services.PersistenceService();
+     private Instant lastActivity = Instant.now();
+     private final Duration sessionTimeout = Duration.ofMinutes(15);
  
      public MainWindow(AuthenticationService authenticationService, BankService bankService) {
          this.authenticationService = authenticationService;
@@ -62,8 +71,8 @@
          setTitle("Online Banking Application");
          setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
          setSize(640, 420);
-         setLocationRelativeTo(null);
- 
+        setLocationRelativeTo(null);
+
          cards.add(buildAuthPanel(), CARD_AUTH);
          cards.add(buildDashboardPanel(), CARD_DASH);
  
@@ -122,23 +131,38 @@
          JButton createBtn = new JButton("Create Account");
          JButton depositBtn = new JButton("Deposit");
          JButton withdrawBtn = new JButton("Withdraw");
+         JButton transferBtn = new JButton("Transfer");
+         JButton detailsBtn = new JButton("Account Details");
          JButton historyBtn = new JButton("View History");
-         JButton refreshBtn = new JButton("Refresh");
-         JButton logoutBtn = new JButton("Logout");
+          JButton refreshBtn = new JButton("Refresh");
+          JButton logoutBtn = new JButton("Logout");
+          JButton saveBtn = new JButton("Save");
+          JButton loadBtn = new JButton("Load");
+          JButton exportBtn = new JButton("Export History");
  
          actions.add(createBtn);
          actions.add(depositBtn);
          actions.add(withdrawBtn);
+         actions.add(transferBtn);
+         actions.add(detailsBtn);
          actions.add(historyBtn);
-         actions.add(refreshBtn);
-         actions.add(logoutBtn);
+          actions.add(refreshBtn);
+          actions.add(saveBtn);
+          actions.add(loadBtn);
+          actions.add(exportBtn);
+          actions.add(logoutBtn);
  
          createBtn.addActionListener(e -> actionCreateAccount());
          depositBtn.addActionListener(e -> actionDeposit());
          withdrawBtn.addActionListener(e -> actionWithdraw());
+         transferBtn.addActionListener(e -> actionTransfer());
+         detailsBtn.addActionListener(e -> actionViewAccountDetails());
          historyBtn.addActionListener(e -> actionViewHistory());
-         refreshBtn.addActionListener(e -> refreshAccountsList());
-         logoutBtn.addActionListener(e -> doLogout());
+          refreshBtn.addActionListener(e -> refreshAccountsList());
+          logoutBtn.addActionListener(e -> doLogout());
+          saveBtn.addActionListener(e -> actionSave());
+          loadBtn.addActionListener(e -> actionLoad());
+          exportBtn.addActionListener(e -> actionExportHistory());
  
          JPanel south = new JPanel(new BorderLayout());
          south.add(actions, BorderLayout.CENTER);
@@ -157,7 +181,7 @@
          refreshAccountsList();
      }
  
-     private void doRegister() {
+      private void doRegister() {
          String username = usernameField.getText().trim();
          String password = new String(passwordField.getPassword());
          if (username.isEmpty() || password.isEmpty()) {
@@ -169,11 +193,18 @@
              // Also create a corresponding Customer profile
              Customer existing = bankService.findCustomerByUsername(username);
              if (existing == null) {
-                 bankService.addCustomer(new Customer(username, "", new User(username, password)));
+                 User u = authenticationService.getUser(username);
+                 if (u != null) {
+                     bankService.addCustomer(new Customer(username, "", u));
+                 }
              }
              setStatus("Registered. You can now log in.");
          } else {
-             setStatus("Username already exists.");
+             if (authenticationService.getUser(username) != null) {
+                 setStatus("Username already exists.");
+             } else {
+                 setStatus("Password must be at least 8 chars and include uppercase, lowercase, and a digit.");
+             }
          }
      }
  
@@ -184,13 +215,15 @@
              setStatus("Please enter username and password.");
              return;
          }
-         if (authenticationService.login(username, password) != null) {
+        User user = authenticationService.login(username, password);
+        if (user != null) {
              currentUsername = username;
              // Ensure customer exists
              if (bankService.findCustomerByUsername(username) == null) {
-                 bankService.addCustomer(new Customer(username, "", new User(username, password)));
+                 bankService.addCustomer(new Customer(username, "", user));
              }
-             showDash();
+            showDash();
+            touchActivity();
          } else {
              setStatus("Invalid credentials.");
          }
@@ -205,13 +238,15 @@
          showAuth();
      }
  
-     private void refreshAccountsList() {
+    private void refreshAccountsList() {
          accountsListModel.clear();
          if (currentUsername == null) return;
+        if (isSessionExpired()) { doLogout(); return; }
          List<Account> accounts = bankService.getAccountsForCustomer(currentUsername);
         for (Account acc : accounts) {
             accountsListModel.addElement(acc.getAccountNumber() + " | Balance: " + INR.format(acc.getBalance()));
         }
+        touchActivity();
      }
  
      private Customer getCurrentCustomer() {
@@ -238,6 +273,12 @@
  
          Customer c = getCurrentCustomer();
          if (c == null) { dashStatus.setText("No customer context."); return; }
+
+         // Prevent duplicate account numbers for the same customer
+         if (findAccountByNumber(accountNumber) != null) {
+             JOptionPane.showMessageDialog(this, "Account number already exists.", "Error", JOptionPane.ERROR_MESSAGE);
+             return;
+         }
  
          try {
              if (choice == 0) { // Savings
@@ -268,6 +309,10 @@
              String amountStr = JOptionPane.showInputDialog(this, "Amount to deposit:");
              if (amountStr == null) return;
              double amount = Double.parseDouble(amountStr);
+             if (amount <= 0) {
+                 JOptionPane.showMessageDialog(this, "Amount must be positive.", "Error", JOptionPane.ERROR_MESSAGE);
+                 return;
+             }
              acc.deposit(amount);
              dashStatus.setText("Deposit successful.");
              refreshAccountsList();
@@ -286,15 +331,25 @@
              String amountStr = JOptionPane.showInputDialog(this, "Amount to withdraw:");
              if (amountStr == null) return;
              double amount = Double.parseDouble(amountStr);
-             acc.withdraw(amount);
-             dashStatus.setText("Withdrawal processed.");
+             if (amount <= 0) {
+                 JOptionPane.showMessageDialog(this, "Amount must be positive.", "Error", JOptionPane.ERROR_MESSAGE);
+                 return;
+             }
+             boolean ok = acc.withdraw(amount);
+             if (ok) {
+                 dashStatus.setText("Withdrawal processed.");
+             } else {
+                 JOptionPane.showMessageDialog(this, "Withdrawal failed. Check balance or limits.", "Error", JOptionPane.ERROR_MESSAGE);
+             }
              refreshAccountsList();
          } catch (NumberFormatException ex) {
              JOptionPane.showMessageDialog(this, "Invalid amount.", "Error", JOptionPane.ERROR_MESSAGE);
          }
      }
  
-    private void actionViewHistory() {
+      private void actionViewHistory() {
+        if (currentUsername == null) { dashStatus.setText("Not logged in."); return; }
+        if (isSessionExpired()) { doLogout(); return; }
         String accountNumber = getSelectedAccountNumber();
         if (accountNumber == null) accountNumber = promptAccountNumber();
          if (accountNumber == null) return;
@@ -313,6 +368,120 @@
          area.setEditable(false);
          JOptionPane.showMessageDialog(this, new JScrollPane(area), "Transaction History", JOptionPane.INFORMATION_MESSAGE);
      }
+
+      private void actionTransfer() {
+          if (currentUsername == null) { dashStatus.setText("Not logged in."); return; }
+          if (isSessionExpired()) { doLogout(); return; }
+          List<Account> accounts = bankService.getAccountsForCustomer(currentUsername);
+          if (accounts.size() < 2) {
+              JOptionPane.showMessageDialog(this, "Need at least two accounts to transfer.");
+              return;
+          }
+          String from = getSelectedAccountNumber();
+          if (from == null) from = promptAccountNumber();
+          if (from == null) return;
+          String to = JOptionPane.showInputDialog(this, "Enter destination account number:");
+          if (to == null || to.isBlank()) return;
+          if (from.equals(to)) {
+              JOptionPane.showMessageDialog(this, "Source and destination cannot be the same.");
+              return;
+          }
+          String amountStr = JOptionPane.showInputDialog(this, "Amount to transfer:");
+          if (amountStr == null) return;
+          try {
+              double amount = Double.parseDouble(amountStr);
+              if (amount <= 0) {
+                  JOptionPane.showMessageDialog(this, "Amount must be positive.");
+                  return;
+              }
+              boolean ok = bankService.transfer(currentUsername, from, to, amount);
+              if (ok) {
+                  dashStatus.setText("Transfer complete.");
+                  refreshAccountsList();
+                  touchActivity();
+              } else {
+                  JOptionPane.showMessageDialog(this, "Transfer failed. Check balances and accounts.", "Error", JOptionPane.ERROR_MESSAGE);
+              }
+          } catch (NumberFormatException ex) {
+              JOptionPane.showMessageDialog(this, "Invalid amount.", "Error", JOptionPane.ERROR_MESSAGE);
+          }
+      }
+
+      private void actionViewAccountDetails() {
+          if (currentUsername == null) { dashStatus.setText("Not logged in."); return; }
+          if (isSessionExpired()) { doLogout(); return; }
+          String accountNumber = getSelectedAccountNumber();
+          if (accountNumber == null) accountNumber = promptAccountNumber();
+          if (accountNumber == null) return;
+          Account acc = findAccountByNumber(accountNumber);
+          if (acc == null) { dashStatus.setText("Account not found."); return; }
+          String type = (acc instanceof SavingsAccount) ? "Savings" : (acc instanceof CheckingAccount ? "Checking" : "Account");
+          StringBuilder details = new StringBuilder();
+          details.append("Account Number: ").append(acc.getAccountNumber()).append('\n');
+          details.append("Type: ").append(type).append('\n');
+          if (acc instanceof SavingsAccount sa) {
+              details.append("Interest Rate: ").append(sa.getInterestRate()).append('\n');
+          } else if (acc instanceof CheckingAccount ca) {
+              details.append("Overdraft Limit: ").append(INR.format(ca.getOverdraftLimit())).append('\n');
+          }
+          if (acc.getCreatedAt() != null) {
+              details.append("Created At: ").append(acc.getCreatedAt().toString()).append('\n');
+          }
+          details.append("Balance: ").append(INR.format(acc.getBalance())).append('\n');
+          JOptionPane.showMessageDialog(this, details.toString(), "Account Details", JOptionPane.INFORMATION_MESSAGE);
+      }
+
+      private void actionSave() {
+          JFileChooser chooser = new JFileChooser();
+          chooser.setDialogTitle("Save Data");
+          if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+              Path file = chooser.getSelectedFile().toPath();
+              try {
+                  persistenceService.save(file, authenticationService, bankService);
+                  dashStatus.setText("Saved.");
+              } catch (Exception ex) {
+                  JOptionPane.showMessageDialog(this, "Save failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+              }
+          }
+      }
+
+      private void actionLoad() {
+          JFileChooser chooser = new JFileChooser();
+          chooser.setDialogTitle("Load Data");
+          if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+              Path file = chooser.getSelectedFile().toPath();
+              try {
+                  persistenceService.load(file, authenticationService, bankService);
+                  dashStatus.setText("Loaded.");
+                  refreshAccountsList();
+              } catch (Exception ex) {
+                  JOptionPane.showMessageDialog(this, "Load failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+              }
+          }
+      }
+
+      private void actionExportHistory() {
+          String accountNumber = getSelectedAccountNumber();
+          if (accountNumber == null) accountNumber = promptAccountNumber();
+          if (accountNumber == null) return;
+          Account acc = findAccountByNumber(accountNumber);
+          if (acc == null) { dashStatus.setText("Account not found."); return; }
+          JFileChooser chooser = new JFileChooser();
+          chooser.setDialogTitle("Export Transaction History");
+          if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+              Path file = chooser.getSelectedFile().toPath();
+              try (java.io.BufferedWriter writer = java.nio.file.Files.newBufferedWriter(file)) {
+                  for (Transaction t : acc.getTransactionList()) {
+                      writer.write(t.getDescription());
+                      writer.newLine();
+                  }
+                  dashStatus.setText("Exported.");
+              } catch (Exception ex) {
+                  JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+              }
+          }
+      }
+   
  
      private String promptAccountNumber() {
          return JOptionPane.showInputDialog(this, "Enter account number:");
@@ -331,12 +500,15 @@
      }
  
      // Standalone launcher (optional)
-     public static void main(String[] args) {
-         SwingUtilities.invokeLater(() -> {
+  private void touchActivity() { lastActivity = java.time.Instant.now(); }
+  private boolean isSessionExpired() { return currentUsername != null && java.time.Instant.now().isAfter(lastActivity.plus(sessionTimeout)); }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
              var auth = new com.banking.services.AuthenticationService();
              var bank = new com.banking.services.BankService();
              MainWindow window = new MainWindow(auth, bank);
              window.setVisible(true);
-         });
-     }
- }
+        });
+    }
+}

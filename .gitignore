@@ -5,3 +5,19 @@ target/
 .idea/
 .vscode/
 *.log
+# OS files
+.DS_Store
+Thumbs.db
+# Eclipse/IntelliJ
+*.iml
+.classpath
+.project
+.settings/
+# Gradle/Maven (future)
+/.gradle/
+/build/
+/.mvn/
+.mvn/
+# Misc
+*.tmp
+*.swp

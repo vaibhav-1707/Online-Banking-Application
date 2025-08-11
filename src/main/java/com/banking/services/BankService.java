@@ -54,4 +54,42 @@ public class BankService {
             return new ArrayList<>(); // No accounts if customer not found
         }
     }
+
+    /**
+     * Find an account by number for a specific user.
+     */
+    public Account findAccount(String username, String accountNumber) {
+        Customer customer = findCustomerByUsername(username);
+        if (customer == null) return null;
+        for (Account a : customer.getAccounts()) {
+            if (a.getAccountNumber().equals(accountNumber)) return a;
+        }
+        return null;
+    }
+
+    /**
+     * Transfer funds between two accounts of the same user.
+     * Returns true on success.
+     */
+    public boolean transfer(String username, String fromAccountNumber, String toAccountNumber, double amount) {
+        if (amount <= 0) return false;
+        if (fromAccountNumber.equals(toAccountNumber)) return false;
+        Account from = findAccount(username, fromAccountNumber);
+        Account to = findAccount(username, toAccountNumber);
+        if (from == null || to == null) return false;
+        boolean withdrawn = from.withdraw(amount);
+        if (!withdrawn) return false;
+        to.deposit(amount);
+        return true;
+    }
+
+    // Persistence helpers
+    public List<Customer> exportCustomers() {
+        return new ArrayList<>(customers);
+    }
+
+    public void importCustomers(List<Customer> imported) {
+        customers.clear();
+        if (imported != null) customers.addAll(imported);
+    }
 }

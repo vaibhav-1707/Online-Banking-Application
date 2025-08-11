@@ -1,10 +1,14 @@
 package com.banking.model;
 
+import java.io.Serial;
+
 /**
  * CheckingAccount represents a checking bank account.
  * It extends Account and optionally allows overdraft (negative balance).
  */
 public class CheckingAccount extends Account {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     // Overdraft limit allowed; how far below zero the balance can go
     private double overdraftLimit;
@@ -44,16 +48,17 @@ public class CheckingAccount extends Account {
      * @param amount The amount to withdraw
      */
     @Override
-    public void withdraw(double amount) {
-        if (amount > 0) {
-            if ((balance - amount) >= -overdraftLimit) {
-                balance -= amount;
-                transactionList.add(new Transaction("withdrawal", amount, balance));
-            } else {
-                System.out.println("Withdrawal denied: Overdraft limit exceeded.");
-            }
-        } else {
+    public boolean withdraw(double amount) {
+        if (amount <= 0) {
             System.out.println("Withdrawal amount must be positive.");
+            return false;
         }
+        if ((balance - amount) >= -overdraftLimit) {
+            balance -= amount;
+            transactionList.add(new Transaction("withdrawal", amount, balance));
+            return true;
+        }
+        System.out.println("Withdrawal denied: Overdraft limit exceeded.");
+        return false;
     }
 }

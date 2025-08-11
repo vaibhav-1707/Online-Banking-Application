@@ -1,5 +1,7 @@
 package com.banking.model;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.text.NumberFormat;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -10,7 +12,9 @@ import java.util.Locale;
  * It records details about deposits or withdrawals on an account,
  * including the type, amount, timestamp, and resulting balance.
  */
-public class Transaction {
+public class Transaction implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     // Unique identifier for each transaction
     private String transactionId;
