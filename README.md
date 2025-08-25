@@ -1,208 +1,150 @@
-# Online Banking Application — Step-by-Step Practice Guide
+# 🏦 Online Banking Application
 
-This guide lets you rebuild the application from scratch without looking at any source code. Follow it step by step and write the code yourself. The app has both a console UI and a Swing GUI, with in‑memory data structures (no database).
-
-Use this as a checklist: finish each section before moving on.
-
----
-
-## 0) Prerequisites
-
-- Install JDK 17+ and ensure `java` and `javac` are on PATH
-- Optional: Git, IntelliJ/VS Code
+A **Java-based** banking system simulation implementing core banking features such as user registration, login, account management, deposits, withdrawals, and transaction history.
+The application offers both a **console UI** and a modern **Swing GUI** desktop interface, utilizing in-memory data structures (no database required).
 
 ---
 
-## 1) Project Structure
-
-Create a Maven/Gradle‑like layout (even if you compile with `javac`):
-
-- `src/main/java/com/banking/` — main application entry point
-- `src/main/java/com/banking/model/` — domain classes
-- `src/main/java/com/banking/services/` — business services
-- `src/main/java/com/banking/ui/` — user interfaces (console + Swing)
-
-Acceptance: directories exist and compile with an empty `App` placeholder.
+![Banking Illustration](https://user-images.githubusercontent.com/yourusername/assets/banking-illustration.png)
+*Illustration: Secure and simple banking experience.*
 
 ---
 
-## 2) Domain Model (Design First, Then Implement)
+## 🚀 Features
 
-Goal: model users, customers, accounts, and transactions.
-
-2.1) User
-
-- Fields: username, password (plain for practice)
-- Behavior: authenticate(inputPassword) → boolean
-- Acceptance: returns true only if password matches
-
-2.2) Transaction
-
-- Fields: id (UUID), timestamp, type ("deposit"/"withdrawal"), amount, resultingBalance
-- Behavior: description string including timestamp, type, ₹ amount, and ₹ resultingBalance
-- Formatting: use Indian Rupee currency formatting (₹) and avoid scientific notation
-
-2.3) Account (abstract)
-
-- Fields: accountNumber, balance, transactionList
-- Behavior:
-  - getAccountNumber(), getBalance(), getTransactionList()
-  - deposit(amount): amount>0 → increase balance and add transaction
-  - withdraw(amount): amount>0 and ≤ balance → decrease balance and add transaction
-- Acceptance: balances update correctly and each operation appends one transaction
-
-2.4) SavingsAccount (extends Account)
-
-- Field: interestRate (e.g., 0.05 for 5%)
-- Behavior: applyInterest() → computes interest as balance*rate and deposits it
-
-2.5) CheckingAccount (extends Account)
-
-- Field: overdraftLimit (positive number)
-- Behavior: override withdraw to allow balance down to −overdraftLimit; add transaction if allowed
-
-2.6) Customer
-
-- Fields: name, email, user, accounts (list)
-- Behavior: getUser(), getAccounts(), addAccount(Account)
-- Acceptance: can attach multiple accounts to one customer
-
-Finish Criteria for Section 2:
-
-- All classes compile and basic manual tests with temporary objects behave as expected
+| Feature                         | Description                                  |
+| ------------------------------- | -------------------------------------------- |
+| 🔐 **User Authentication**      | Secure username/password register & login    |
+| 💰 **Account Types**            | Savings (interest) & Checking (overdraft)    |
+| 🏦 **Account Management**       | Create and manage multiple accounts          |
+| 💳 **Transactional Operations** | Deposit and withdrawals with validation      |
+| 📜 **Transaction History**      | Detailed logs of deposits & withdrawals      |
+| 🖥️ **Swing GUI**               | Intuitive and responsive graphical interface |
+| ⌨️ **Console UI**               | Terminal-based interface for quick access    |
+| ⚙️ **In-memory Data Storage**   | No database needed — easy to test & extend   |
 
 ---
 
-## 3) Services (Business Logic)
+## 📁 Project Structure
 
-3.1) AuthenticationService
-
-- In‑memory map of username → User
-- registerUser(username, password): returns false if username exists; otherwise create User and return true
-- login(username, password): returns User on success; null otherwise
-
-3.2) BankService
-
-- In‑memory list of Customer
-- addCustomer(Customer)
-- findCustomerByUsername(username) → Customer or null
-- getAccountsForCustomer(username) → list of Account (empty list if no customer)
-
-Finish Criteria for Section 3:
-
-- You can register a user, create a matching Customer, and retrieve their accounts
-
----
-
-## 4) Console UI (Practice Loop + Input Handling)
-
-Create `ConsoleUI` with a simple loop:
-
-- If no user is logged in: show menu [Register, Login, Exit]
-  - Register: prompts username/password → AuthenticationService.registerUser; also create a Customer in BankService
-  - Login: prompts username/password → AuthenticationService.login → sets loggedInUser
-- If logged in: show menu [View Accounts, Deposit, Withdraw, View Transaction History, Logout]
-  - View Accounts: list account number + ₹ balance
-  - Deposit/Withdraw: ask for account number and amount, perform operation, show new balance
-  - View History: show each transaction description
-  - Logout: clear loggedInUser
-
-Finish Criteria for Section 4:
-
-- All flows work end‑to‑end via console; transactions appear and balances update
-
----
-
-## 5) GUI (Swing) — `MainWindow`
-
-Use a JFrame with a `CardLayout` to switch between:
-
-5.1) Auth Card
-
-- Fields: username (JTextField), password (JPasswordField)
-- Buttons: Login, Register
-- Behavior:
-  - Register: call AuthenticationService.registerUser; if success, ensure a matching Customer exists in BankService
-  - Login: validate via AuthenticationService.login; on success set currentUsername and switch to Dashboard card
-
-5.2) Dashboard Card
-
-- Components:
-  - Accounts list (JList) showing: `<accountNumber> | Balance: ₹<amount>`
-  - Buttons: Create Account, Deposit, Withdraw, View History, Refresh, Logout
-  - Status label for user feedback
-- Behaviors:
-  - Create Account: dialog to choose Savings vs Checking; prompt for account number; then prompt rate/overdraft as needed; add to current customer
-  - Deposit/Withdraw: prefer using the selected account in the list; if none selected, prompt for account number; then prompt for amount; update and refresh the list
-  - View History: open a read‑only dialog showing each transaction description
-  - Refresh: reload accounts list
-  - Logout: clear state and return to Auth card
-- Currency: display all money as ₹ in human‑readable format (no scientific notation)
-
-Finish Criteria for Section 5:
-
-- You can perform every operation from the GUI that exists in the console UI
-
----
-
-## 6) Build & Run (No Source Code Shown)
-
-From project root:
-
-Compile everything:
-
-```sh
-javac -d out -sourcepath src/main/java \
-  src/main/java/com/banking/App.java \
-  src/main/java/com/banking/ui/*.java \
-  src/main/java/com/banking/services/*.java \
-  src/main/java/com/banking/model/*.java
+```text
+OnlineBankingApplication/
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── banking/
+│   │   │           ├── App.java        # Main entry point (GUI launcher)
+│   │   │           ├── model/          # Data models (User, Account, etc.)
+│   │   │           ├── services/       # Business logic & services
+│   │   │           └── ui/             # Console and Swing UI classes
+│   └── resources/                      # Resources (if any)
+├── out/                                 # Compiled classes folder
+├── README.md
+└── .gitignore
 ```
 
-Run GUI:
+---
 
-```sh
+## 💻 Build & Run Instructions
+
+### Prerequisites
+
+* Java Development Kit (JDK) **17+**
+* Recommended IDE: **IntelliJ IDEA**, **Eclipse**, or **VS Code**
+* Git (to clone the repo)
+
+### Clone the Repository
+
+```bash
+git clone https://github.com/vaibhav-1707/Online-Banking-Application.git
+cd Online-Banking-Application
+```
+
+### Compile the Project
+
+```bash
+javac -d out -sourcepath src/main/java \
+src/main/java/com/banking/App.java \
+src/main/java/com/banking/ui/*.java \
+src/main/java/com/banking/services/*.java \
+src/main/java/com/banking/model/*.java
+```
+
+### Run the Swing GUI Application (Recommended)
+
+```bash
 java -cp out com.banking.App
 ```
 
-Optional: run console UI instead by creating a console `main` that starts your `ConsoleUI` loop.
+### Run the Console UI (Optional)
+
+```bash
+java -cp out com.banking.ui.ConsoleUI
+```
 
 ---
 
-## 7) Manual Test Scenarios (Checklist)
+## 🎯 Quick Start with the Swing GUI
 
-- Register a new user → login succeeds → a Customer exists
-- Create Savings account, deposit, apply interest, view history
-- Create Checking account, withdraw into overdraft (within limit), view history
-- Deposit then withdraw exact balance → balance returns to zero; two transactions recorded
-- Logout → cannot access dashboard; login again restores access and data
-
----
-
-## 8) Enhancements (When You Want More Practice)
-
-- Input validation: negative amounts, numeric parsing, duplicate account numbers
-- Persist data: JSON or simple file save/load
-- Interest scheduler: apply interest monthly for all savings accounts
-- UI polish: disable buttons when not applicable; improve layout; keyboard shortcuts
-- Unit tests for services and model behavior
+1. **Register** a new user (unique username & password)
+2. **Login** with your credentials
+3. **Create** Savings or Checking accounts from the dashboard
+4. **Deposit** or **Withdraw** funds
+5. **View** transaction history anytime
+6. **Logout** securely when done
 
 ---
 
-## 9) Version Control (Optional)
+## 🛠 Development Guide — Step-by-Step Practice
 
-Initialize Git, commit, and push to a remote repository (GitHub). Avoid committing build outputs (`out/`, `target/`, `*.class`).
+This project is ideal for learning Java OOP, Swing UI, and service-layer design by building incrementally:
+
+1. **Set up prerequisites** — JDK 17+, Git, IDE
+2. **Project structure** — Organize into `model/`, `services/`, and `ui/` packages
+3. **Domain model** — Implement `User`, `Transaction`, abstract `Account`, `SavingsAccount`, `CheckingAccount`, and `Customer`
+4. **Service layer** — Build `AuthenticationService` & `BankService`
+5. **Console UI** — Implement looping menus for all operations
+6. **Swing UI** — Create `MainWindow` with `CardLayout` for login/dashboard views
+7. **Testing** — Register/login, create accounts, perform deposits/withdrawals, verify transaction logs
+8. **Enhancements** — Add validations, persistent storage, scheduled interest, better UI/UX
 
 ---
 
-## 10) What You Should Be Able To Explain Afterward
+## 📈 Roadmap & Future Enhancements
 
-- Why `Account` is abstract and what varies in its subclasses
-- How transactions record every balance change
-- How services isolate business logic from UIs
-- How `CardLayout` swaps between auth and dashboard views in Swing
-- How and why to format money with a locale‑aware currency formatter
+* 🔄 Transfers between accounts
+* 🗄️ Persistent storage (JSON, DB)
+* 🔑 Secure password hashing
+* 🌐 Web frontend / mobile client integration
+* 🎨 Improved UI themes & responsiveness
+* 🧪 Unit testing for all services and models
 
 ---
 
-Happy practicing! Build it step by step without copying code. Use this document as your single source of truth for requirements and acceptance criteria.
+## 🤝 Contribution
+
+Contributions are welcome!
+Fork the repo, create a feature branch, and open a pull request.
+Report bugs or suggest features via **[GitHub Issues](https://github.com/vaibhav-1707/Online-Banking-Application/issues)**.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+## 📬 Contact
+
+For questions or support:
+📧 **[vaibhavgautam1707@gmail.com](mailto:vaibhavgautam1707@gmail.com)**
+
+---
+
+## 🙌 Thank You for Exploring the Online Banking Application
+
+Build, test, and learn step by step — happy coding! 🚀
+
+---

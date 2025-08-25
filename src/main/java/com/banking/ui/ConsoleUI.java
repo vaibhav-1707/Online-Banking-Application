@@ -315,4 +315,11 @@ public class ConsoleUI {
         }
         return null;
     }
+
+    public static void main(String[] args) {
+        AuthenticationService auth = new AuthenticationService();
+        BankService bank = new BankService();
+        ConsoleUI app = new ConsoleUI(auth, bank);
+        app.start();
+    }
 }

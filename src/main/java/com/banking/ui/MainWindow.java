@@ -7,6 +7,7 @@
  import com.banking.model.Transaction;
  import com.banking.model.User;
  import com.banking.services.AuthenticationService;
+ import com.banking.services.EmailService;
  import com.banking.services.BankService;
  
  import javax.swing.BorderFactory;
@@ -21,6 +22,7 @@
  import javax.swing.JScrollPane;
  import javax.swing.JTextArea;
  import javax.swing.JTextField;
+ import javax.swing.SwingWorker;
  import javax.swing.SwingUtilities;
  import javax.swing.JFileChooser;
  import java.awt.BorderLayout;
@@ -34,11 +36,17 @@
  import java.nio.file.Path;
  import java.time.Instant;
  import java.time.Duration;
+ import java.util.Properties;
+ import java.io.InputStream;
+ import java.io.IOException;
+ import javax.mail.MessagingException;
+
 
 public class MainWindow extends JFrame {
 
      private final AuthenticationService authenticationService;
      private final BankService bankService;
+    private final EmailService emailService;
  
      // Auth state
      private String currentUsername = null;
@@ -67,6 +75,7 @@ public class MainWindow extends JFrame {
      public MainWindow(AuthenticationService authenticationService, BankService bankService) {
          this.authenticationService = authenticationService;
          this.bankService = bankService;
+        this.emailService = loadEmailServiceFromConfig();
  
          setTitle("Online Banking Application");
          setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -79,6 +88,25 @@ public class MainWindow extends JFrame {
          setContentPane(cards);
          showAuth();
      }
+
+    private EmailService loadEmailServiceFromConfig() {
+        Properties props = new Properties();
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream("config.properties")) {
+            if (input == null) {
+                System.err.println("Sorry, unable to find config.properties. Email notifications will be disabled.");
+                return null; // Or a "no-op" email service
+            }
+            props.load(input);
+            String host = props.getProperty("mail.smtp.host");
+            String port = props.getProperty("mail.smtp.port");
+            String user = props.getProperty("mail.smtp.user");
+            String pass = props.getProperty("mail.smtp.password");
+            return new EmailService(host, port, user, pass);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            return null;
+        }
+    }
  
      private JPanel buildAuthPanel() {
          JPanel root = new JPanel(new BorderLayout(12, 12));
@@ -188,6 +216,13 @@ public class MainWindow extends JFrame {
              setStatus("Please enter username and password.");
              return;
          }
+
+        String email = JOptionPane.showInputDialog(this, "Please enter your email address for notifications:");
+        if (email == null || email.isBlank() || !email.contains("@")) {
+            setStatus("A valid email is required for registration.");
+            return;
+        }
+
          boolean ok = authenticationService.registerUser(username, password);
          if (ok) {
              // Also create a corresponding Customer profile
@@ -195,10 +230,14 @@ public class MainWindow extends JFrame {
              if (existing == null) {
                  User u = authenticationService.getUser(username);
                  if (u != null) {
-                     bankService.addCustomer(new Customer(username, "", u));
+                    // Assuming Customer constructor is (name, email, user)
+                     bankService.addCustomer(new Customer(username, email, u));
                  }
              }
              setStatus("Registered. You can now log in.");
+            sendEmailAsync(email, "Welcome to Online Banking",
+                    "Hello " + username + ",\n\n" +
+                            "Thank you for registering with the Online Banking Application. We're glad to have you!");
          } else {
              if (authenticationService.getUser(username) != null) {
                  setStatus("Username already exists.");
@@ -218,12 +257,17 @@ public class MainWindow extends JFrame {
         User user = authenticationService.login(username, password);
         if (user != null) {
              currentUsername = username;
-             // Ensure customer exists
-             if (bankService.findCustomerByUsername(username) == null) {
+            Customer customer = bankService.findCustomerByUsername(username);
+             if (customer == null) {
                  bankService.addCustomer(new Customer(username, "", user));
+                customer = bankService.findCustomerByUsername(username);
              }
             showDash();
             touchActivity();
+
+            if (customer != null && customer.getEmail() != null && !customer.getEmail().isBlank()) {
+                sendEmailAsync(customer.getEmail(), "Security Alert: New Login", "Hello " + username + ",\n\nYour account was just accessed from our application. If this was not you, please contact support immediately.");
+            }
          } else {
              setStatus("Invalid credentials.");
          }
@@ -316,6 +360,14 @@ public class MainWindow extends JFrame {
              acc.deposit(amount);
              dashStatus.setText("Deposit successful.");
              refreshAccountsList();
+
+            Customer customer = getCurrentCustomer();
+            if (customer != null && customer.getEmail() != null && !customer.getEmail().isBlank()) {
+                String subject = "Transaction Notification: Deposit";
+                String body = String.format("Hello %s,\n\nA deposit of %s has been made to your account %s.\nYour new balance is %s.",
+                        currentUsername, INR.format(amount), acc.getAccountNumber(), INR.format(acc.getBalance()));
+                sendEmailAsync(customer.getEmail(), subject, body);
+            }
          } catch (NumberFormatException ex) {
              JOptionPane.showMessageDialog(this, "Invalid amount.", "Error", JOptionPane.ERROR_MESSAGE);
          }
@@ -338,6 +390,13 @@ public class MainWindow extends JFrame {
              boolean ok = acc.withdraw(amount);
              if (ok) {
                  dashStatus.setText("Withdrawal processed.");
+                Customer customer = getCurrentCustomer();
+                if (customer != null && customer.getEmail() != null && !customer.getEmail().isBlank()) {
+                    String subject = "Transaction Notification: Withdrawal";
+                    String body = String.format("Hello %s,\n\nA withdrawal of %s has been made from your account %s.\nYour new balance is %s.",
+                            currentUsername, INR.format(amount), acc.getAccountNumber(), INR.format(acc.getBalance()));
+                    sendEmailAsync(customer.getEmail(), subject, body);
+                }
              } else {
                  JOptionPane.showMessageDialog(this, "Withdrawal failed. Check balance or limits.", "Error", JOptionPane.ERROR_MESSAGE);
              }
@@ -398,7 +457,16 @@ public class MainWindow extends JFrame {
               if (ok) {
                   dashStatus.setText("Transfer complete.");
                   refreshAccountsList();
-                  touchActivity();
+
+                 Customer customer = getCurrentCustomer();
+                 Account fromAcc = findAccountByNumber(from);
+                 if (customer != null && fromAcc != null && customer.getEmail() != null && !customer.getEmail().isBlank()) {
+                     String subject = "Transaction Notification: Transfer Sent";
+                     String body = String.format("Hello %s,\n\nA transfer of %s has been sent from your account %s to account %s.\nYour new balance for account %s is %s.",
+                             currentUsername, INR.format(amount), from, to, from, INR.format(fromAcc.getBalance()));
+                     sendEmailAsync(customer.getEmail(), subject, body);
+                 }
+                 touchActivity();
               } else {
                   JOptionPane.showMessageDialog(this, "Transfer failed. Check balances and accounts.", "Error", JOptionPane.ERROR_MESSAGE);
               }
@@ -499,6 +567,28 @@ public class MainWindow extends JFrame {
          statusLabel.setText(message);
      }
  
+     private void sendEmailAsync(String to, String subject, String body) {
+        if (emailService == null) return; // Do nothing if email service failed to load
+         new SwingWorker<Void, Void>() {
+             @Override
+             protected Void doInBackground() throws MessagingException {
+                 emailService.sendEmail(to, subject, body);
+                 return null;
+             }
+ 
+             @Override
+             protected void done() {
+                 try {
+                     get(); // This will re-throw the exception from doInBackground
+                 } catch (Exception e) {
+                    Throwable cause = e.getCause(); // The cause will be the MessagingException
+                    String errorMessage = "Could not send notification email.\nReason: " + (cause != null ? cause.getMessage() : e.getMessage());
+                    JOptionPane.showMessageDialog(MainWindow.this, errorMessage, "Email Error", JOptionPane.WARNING_MESSAGE);
+                 }
+             }
+         }.execute();
+     }
+
      // Standalone launcher (optional)
   private void touchActivity() { lastActivity = java.time.Instant.now(); }
   private boolean isSessionExpired() { return currentUsername != null && java.time.Instant.now().isAfter(lastActivity.plus(sessionTimeout)); }
