@@ -56,7 +56,12 @@ Think of it as a **mini-bank** that runs on your computer!
 
 ## 🖼️ Screenshots
 
-*[Screenshots will be added here showing the login screen, dashboard, and account management]*
+<img width="1913" height="1014" alt="image" src="https://github.com/user-attachments/assets/9222c6b2-aa28-4990-b983-e0377d6e30c4" />
+<img width="1915" height="1015" alt="image" src="https://github.com/user-attachments/assets/0a17f7d8-c5d6-4265-ad66-fb3dd0bbe032" />
+<img width="1917" height="1018" alt="image" src="https://github.com/user-attachments/assets/dbd5b66a-0755-41c6-87a6-e1cba27ab0f7" />
+<img width="1918" height="1017" alt="image" src="https://github.com/user-attachments/assets/0a40cd29-d373-41ec-93fb-cc1dbe3fb5a8" />
+
+
 
 ## 🚀 Installation Guide
 
