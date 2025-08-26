@@ -60,6 +60,23 @@ Think of it as a **mini-bank** that runs on your computer!
 
 ## 🚀 Installation Guide
 
+### ⚠️ SECURITY SETUP (IMPORTANT!)
+
+**Before running the application, you MUST set up your configuration securely:**
+
+1. **Copy the template file:**
+   ```bash
+   cp resources/config.properties.template resources/config.properties
+   ```
+
+2. **Edit `resources/config.properties` with your real credentials:**
+   - Replace `your_username_here` with your database username
+   - Replace `your_password_here` with your database password
+   - Replace `your_email@gmail.com` with your Gmail address
+   - Replace `your_app_password_here` with your Gmail app password
+
+3. **NEVER commit this file to Git** - it's already in `.gitignore`
+
 ### Prerequisites (What You Need First)
 
 #### 1. Java Installation

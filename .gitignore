@@ -21,3 +21,7 @@ Thumbs.db
 # Misc
 *.tmp
 *.swp
+
+# Configuration files with sensitive data
+resources/config.properties
+config.properties
