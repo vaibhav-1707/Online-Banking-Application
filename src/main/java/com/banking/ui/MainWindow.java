@@ -9,6 +9,8 @@
  import com.banking.services.AuthenticationService;
  import com.banking.services.EmailService;
  import com.banking.services.BankService;
+ import com.banking.services.DatabaseService;
+ import com.banking.services.MonthlyStatementService;
  
  import javax.swing.BorderFactory;
  import javax.swing.DefaultListModel;
@@ -46,7 +48,9 @@ public class MainWindow extends JFrame {
 
      private final AuthenticationService authenticationService;
      private final BankService bankService;
-    private final EmailService emailService;
+     private final EmailService emailService;
+     private final DatabaseService databaseService;
+     private final MonthlyStatementService monthlyStatementService;
  
      // Auth state
      private String currentUsername = null;
@@ -75,7 +79,9 @@ public class MainWindow extends JFrame {
      public MainWindow(AuthenticationService authenticationService, BankService bankService) {
          this.authenticationService = authenticationService;
          this.bankService = bankService;
-        this.emailService = loadEmailServiceFromConfig();
+         this.emailService = loadEmailServiceFromConfig();
+         this.databaseService = new DatabaseService();
+         this.monthlyStatementService = new MonthlyStatementService(emailService);
  
          setTitle("Online Banking Application");
          setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -86,24 +92,58 @@ public class MainWindow extends JFrame {
          cards.add(buildDashboardPanel(), CARD_DASH);
  
          setContentPane(cards);
+         
+         // Test database connection and initialize
+         initializeDatabase();
+         
          showAuth();
      }
 
+    private void initializeDatabase() {
+        try {
+            if (databaseService.testConnection()) {
+                System.out.println("Database connection successful!");
+                databaseService.initializeDatabase();
+                System.out.println("Database initialized successfully!");
+            } else {
+                System.err.println("Database connection failed. Application will continue with file-based storage.");
+            }
+        } catch (Exception e) {
+            System.err.println("Database initialization error: " + e.getMessage());
+            System.err.println("Application will continue with file-based storage.");
+        }
+    }
+    
     private EmailService loadEmailServiceFromConfig() {
         Properties props = new Properties();
         try (InputStream input = getClass().getClassLoader().getResourceAsStream("config.properties")) {
             if (input == null) {
                 System.err.println("Sorry, unable to find config.properties. Email notifications will be disabled.");
-                return null; // Or a "no-op" email service
+                return null;
             }
             props.load(input);
             String host = props.getProperty("mail.smtp.host");
             String port = props.getProperty("mail.smtp.port");
-            String user = props.getProperty("mail.smtp.user");
-            String pass = props.getProperty("mail.smtp.password");
+            String user = props.getProperty("mail.username");
+            String pass = props.getProperty("mail.password");
+            
+            // Validate configuration
+            if (host == null || port == null || user == null || pass == null) {
+                System.err.println("Email configuration incomplete. Email notifications will be disabled.");
+                System.err.println("Host: " + host + ", Port: " + port + ", User: " + user + ", Password configured: " + (pass != null ? "Yes" : "No"));
+                return null;
+            }
+            
+            if (pass.equals("YOUR_GMAIL_APP_PASSWORD_HERE")) {
+                System.err.println("Please configure your Gmail app password in config.properties");
+                System.err.println("Email notifications will be disabled until configured.");
+                return null;
+            }
+            
+            System.out.println("Email service configured successfully for " + user + "@" + host + ":" + port);
             return new EmailService(host, port, user, pass);
         } catch (IOException ex) {
-            ex.printStackTrace();
+            System.err.println("Error loading email configuration: " + ex.getMessage());
             return null;
         }
     }
@@ -167,6 +207,7 @@ public class MainWindow extends JFrame {
           JButton saveBtn = new JButton("Save");
           JButton loadBtn = new JButton("Load");
           JButton exportBtn = new JButton("Export History");
+         JButton statementBtn = new JButton("Monthly Statement");
  
          actions.add(createBtn);
          actions.add(depositBtn);
@@ -178,6 +219,7 @@ public class MainWindow extends JFrame {
           actions.add(saveBtn);
           actions.add(loadBtn);
           actions.add(exportBtn);
+          actions.add(statementBtn);
           actions.add(logoutBtn);
  
          createBtn.addActionListener(e -> actionCreateAccount());
@@ -191,6 +233,7 @@ public class MainWindow extends JFrame {
           saveBtn.addActionListener(e -> actionSave());
           loadBtn.addActionListener(e -> actionLoad());
           exportBtn.addActionListener(e -> actionExportHistory());
+         statementBtn.addActionListener(e -> actionGenerateMonthlyStatement());
  
          JPanel south = new JPanel(new BorderLayout());
          south.add(actions, BorderLayout.CENTER);
@@ -528,7 +571,19 @@ public class MainWindow extends JFrame {
           }
       }
 
-      private void actionExportHistory() {
+      private void actionGenerateMonthlyStatement() {
+         if (currentUsername == null) { dashStatus.setText("Not logged in."); return; }
+         if (isSessionExpired()) { doLogout(); return; }
+         
+         try {
+             monthlyStatementService.generateStatementsNow();
+             dashStatus.setText("Monthly statement generated and sent.");
+         } catch (Exception ex) {
+             dashStatus.setText("Error generating statement: " + ex.getMessage());
+         }
+     }
+     
+     private void actionExportHistory() {
           String accountNumber = getSelectedAccountNumber();
           if (accountNumber == null) accountNumber = promptAccountNumber();
           if (accountNumber == null) return;
